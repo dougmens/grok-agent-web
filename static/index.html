@@ -5,15 +5,146 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Grok Image-to-Video Iteration Studio</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 24px; background: #0f1115; color: #f4f4f6; }
+    :root {
+      color-scheme: dark;
+      --bg: #0f1115;
+      --panel: #1a1d24;
+      --panel-alt: #11141a;
+      --text: #f4f4f6;
+      --muted: #a2a4ab;
+      --accent: #4d7dff;
+      --accent-strong: #8aa2ff;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --border: #2a2f3a;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 24px;
+      background: var(--bg);
+      color: var(--text);
+    }
     h1, h2, h3 { margin: 0 0 12px; }
-    .card { background: #1a1d24; padding: 16px; border-radius: 12px; margin-bottom: 16px; }
-    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-    img { width: 100%; border-radius: 8px; }
-    button { background: #4d7dff; border: none; color: white; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+    h4 { margin: 0 0 8px; }
+    p { margin: 0 0 12px; }
+
+    .card {
+      background: var(--panel);
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      border: 1px solid transparent;
+    }
+
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .muted { color: var(--muted); }
+    .grid { display: grid; gap: 16px; }
+    .thumb-grid { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+    .candidates-grid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(240px, 1fr)); }
+
+    .tile {
+      background: var(--panel-alt);
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    img {
+      width: 100%;
+      border-radius: 8px;
+      display: block;
+      object-fit: cover;
+    }
+
+    .thumb img { max-height: 200px; }
+
+    button {
+      background: var(--accent);
+      border: none;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.secondary { background: #2f3747; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    pre { background: #11141a; padding: 12px; border-radius: 8px; overflow-x: auto; }
-    .muted { color: #a2a4ab; }
+
+    .status-banner {
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      border: 1px solid transparent;
+    }
+    .status-banner.success { background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.6); }
+    .status-banner.running { background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.6); }
+    .status-banner.error { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.6); }
+
+    .stepper {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 0;
+      list-style: none;
+      margin: 0;
+    }
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #151923;
+      border: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .step.complete { background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.5); }
+    .step.active { background: rgba(77, 125, 255, 0.2); border-color: rgba(77, 125, 255, 0.5); }
+
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 8px;
+    }
+
+    details { background: #121620; padding: 8px 10px; border-radius: 8px; }
+    summary { cursor: pointer; font-weight: 600; }
+    pre {
+      margin: 8px 0 0;
+      background: #0b0f15;
+      padding: 10px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+    }
+
+    .video-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(200px, 1fr) minmax(260px, 1fr);
+      align-items: start;
+    }
+
+    .link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #24314b;
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -22,17 +153,29 @@
 
   <div class="card">
     <h2>Start Iteration</h2>
-    <form id="upload-form">
+    <form id="upload-form" class="row">
       <input type="file" id="file-input" accept="image/*" required />
-      <input type="text" id="prompt-input" placeholder="Optional prompt" style="width: 60%;" />
-      <button type="submit">Start</button>
+      <input type="text" id="prompt-input" placeholder="Optional prompt" style="flex: 1; min-width: 220px;" />
+      <button type="submit" id="start-btn">Start</button>
+      <button type="button" id="reset-btn" class="secondary">Start new run</button>
     </form>
-    <div id="job-info" class="muted"></div>
+    <div class="row" style="margin-top: 12px;">
+      <div id="job-info" class="muted"></div>
+      <button type="button" id="copy-job" class="copy-btn" hidden>Copy Job ID</button>
+    </div>
   </div>
 
   <div class="card">
     <h2>Status</h2>
-    <div id="status"></div>
+    <div id="status-banner" class="status-banner running">Awaiting upload...</div>
+    <div id="status-details" class="muted"></div>
+    <div id="error-details" style="margin-top: 8px;"></div>
+    <ul class="stepper" id="stepper">
+      <li class="step" data-step="1">Step 1: Upload</li>
+      <li class="step" data-step="2">Step 2: Style Card</li>
+      <li class="step" data-step="3">Step 3: Candidates</li>
+      <li class="step" data-step="4">Step 4: Final → Video</li>
+    </ul>
   </div>
 
   <div class="card">
@@ -42,24 +185,38 @@
 
   <div class="card">
     <h2>R0–R3 Thumbnails</h2>
-    <div id="thumbnails" class="grid"></div>
+    <div class="grid" style="grid-template-columns: minmax(180px, 240px) 1fr;">
+      <div id="r0-tile"></div>
+      <div id="r1-grid" class="thumb-grid"></div>
+    </div>
   </div>
 
   <div class="card">
     <h2>Candidates</h2>
-    <div id="candidates" class="grid"></div>
-    <button id="next-step" disabled>Generate Next Step</button>
+    <div id="candidates" class="candidates-grid"></div>
+    <div class="row" style="margin-top: 12px;">
+      <button id="next-step" disabled>Generate Next Step</button>
+      <span class="muted" id="candidate-status">Awaiting candidates...</span>
+    </div>
   </div>
 
   <div class="card">
     <h2>Final Image & Video</h2>
-    <div id="final-image"></div>
-    <div id="video-status"></div>
-    <form id="video-form">
-      <input type="text" id="video-image-url" placeholder="Image URL" style="width: 55%;" />
-      <input type="text" id="video-prompt" placeholder="Optional prompt" style="width: 35%;" />
-      <button type="submit">Generate Video</button>
-    </form>
+    <div class="video-grid">
+      <div id="final-image"></div>
+      <div>
+        <form id="video-form" class="grid" style="grid-template-columns: 1fr; gap: 12px;">
+          <input type="text" id="video-image-url" placeholder="Image URL" />
+          <input type="text" id="video-prompt" placeholder="Optional prompt" />
+          <div class="row">
+            <button type="submit" id="video-submit">Generate Video</button>
+            <button type="button" id="copy-video" class="copy-btn" hidden>Copy Video URL</button>
+          </div>
+        </form>
+        <div id="video-status" class="muted" style="margin-top: 12px;"></div>
+        <div id="video-link" style="margin-top: 8px;"></div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -67,18 +224,69 @@
     let pollInterval = null;
 
     const jobInfo = document.getElementById('job-info');
-    const statusEl = document.getElementById('status');
+    const copyJobBtn = document.getElementById('copy-job');
+    const statusBanner = document.getElementById('status-banner');
+    const statusDetails = document.getElementById('status-details');
+    const errorDetails = document.getElementById('error-details');
     const styleCardEl = document.getElementById('style-card');
     const candidatesEl = document.getElementById('candidates');
-    const thumbnailsEl = document.getElementById('thumbnails');
+    const r0TileEl = document.getElementById('r0-tile');
+    const r1GridEl = document.getElementById('r1-grid');
     const nextStepBtn = document.getElementById('next-step');
     const finalImageEl = document.getElementById('final-image');
     const videoStatusEl = document.getElementById('video-status');
+    const videoLinkEl = document.getElementById('video-link');
+    const candidateStatusEl = document.getElementById('candidate-status');
+    const startBtn = document.getElementById('start-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const copyVideoBtn = document.getElementById('copy-video');
+    const videoSubmitBtn = document.getElementById('video-submit');
+
+    const stepperItems = Array.from(document.querySelectorAll('.step'));
+
+    function setBanner(status, text) {
+      statusBanner.className = `status-banner ${status}`;
+      statusBanner.textContent = text;
+    }
+
+    function resetUI() {
+      currentJobId = null;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      document.getElementById('upload-form').reset();
+      jobInfo.textContent = '';
+      copyJobBtn.hidden = true;
+      setBanner('running', 'Awaiting upload...');
+      statusDetails.textContent = '';
+      errorDetails.textContent = '';
+      styleCardEl.textContent = 'Awaiting analysis...';
+      r0TileEl.innerHTML = '';
+      r1GridEl.innerHTML = '';
+      candidatesEl.innerHTML = '';
+      candidateStatusEl.textContent = 'Awaiting candidates...';
+      nextStepBtn.disabled = true;
+      finalImageEl.innerHTML = '';
+      videoStatusEl.textContent = '';
+      videoLinkEl.innerHTML = '';
+      document.getElementById('video-form').reset();
+      copyVideoBtn.hidden = true;
+      stepperItems.forEach((item) => item.classList.remove('active', 'complete'));
+      startBtn.disabled = false;
+      videoSubmitBtn.disabled = true;
+    }
+
+    resetBtn.addEventListener('click', resetUI);
 
     document.getElementById('upload-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const fileInput = document.getElementById('file-input');
       if (!fileInput.files.length) return;
+
+      startBtn.disabled = true;
+      resetBtn.disabled = true;
+      setBanner('running', 'Uploading and analyzing...');
 
       const formData = new FormData();
       formData.append('file', fileInput.files[0]);
@@ -87,50 +295,143 @@
       const response = await fetch('/api/iterate', { method: 'POST', body: formData });
       const data = await response.json();
       currentJobId = data.job_id;
-      jobInfo.textContent = `Job: ${currentJobId}`;
+      jobInfo.textContent = `Job ID: ${currentJobId}`;
+      copyJobBtn.hidden = false;
+      resetBtn.disabled = false;
       if (pollInterval) clearInterval(pollInterval);
       pollInterval = setInterval(fetchStatus, 3000);
       fetchStatus();
     });
 
+    copyJobBtn.addEventListener('click', async () => {
+      if (currentJobId) {
+        await navigator.clipboard.writeText(currentJobId);
+        copyJobBtn.textContent = 'Copied';
+        setTimeout(() => { copyJobBtn.textContent = 'Copy Job ID'; }, 1500);
+      }
+    });
+
+    function updateStepper(data) {
+      const step = data.step || 0;
+      stepperItems.forEach((item) => item.classList.remove('active', 'complete'));
+
+      const uploadStep = stepperItems[0];
+      uploadStep.classList.add(currentJobId ? 'complete' : 'active');
+
+      const styleStep = stepperItems[1];
+      if (data.style_card) {
+        styleStep.classList.add('complete');
+      } else if (currentJobId) {
+        styleStep.classList.add('active');
+      }
+
+      const candidateStep = stepperItems[2];
+      const candidateLabel = `Step 3: Candidates (${Math.min(Math.max(step, 1), 3)}/3)`;
+      candidateStep.textContent = candidateLabel;
+      if (step >= 1 && step <= 3) {
+        candidateStep.classList.add(data.status === 'completed' ? 'complete' : 'active');
+      }
+      if (step >= 3 && data.status === 'completed') {
+        candidateStep.classList.add('complete');
+      }
+
+      const finalStep = stepperItems[3];
+      if (data.final_image_url) {
+        finalStep.classList.add('active');
+      }
+      if (data.status === 'completed') {
+        finalStep.classList.add('complete');
+      }
+    }
+
     async function fetchStatus() {
       if (!currentJobId) return;
       const response = await fetch(`/api/iterate/${currentJobId}`);
       const data = await response.json();
-      statusEl.textContent = `Status: ${data.status} | Step: ${data.step}`;
+
+      statusDetails.textContent = `Status: ${data.status} | Step: ${data.step}`;
       styleCardEl.textContent = data.style_card ? JSON.stringify(data.style_card, null, 2) : 'Awaiting analysis...';
       renderThumbnails(data.thumbnails || {});
       renderCandidates(data);
       renderFinal(data.final_image_url);
-      nextStepBtn.disabled = data.status !== 'ready_for_next';
+      updateStepper(data);
+
+      const isReady = data.status === 'ready_for_next';
+      nextStepBtn.disabled = !isReady;
+      startBtn.disabled = true;
+      videoSubmitBtn.disabled = !data.final_image_url;
+
+      if (data.status === 'error') {
+        setBanner('error', 'Job failed');
+        errorDetails.textContent = data.error || 'Unknown error.';
+        if (pollInterval) clearInterval(pollInterval);
+        return;
+      }
+
       if (data.status === 'completed') {
-        clearInterval(pollInterval);
+        setBanner('success', 'Run completed');
+        if (pollInterval) clearInterval(pollInterval);
+        return;
+      }
+
+      if (data.status === 'awaiting_choice' || data.status === 'ready_for_next') {
+        setBanner('running', 'Awaiting your selection');
+      } else {
+        setBanner('running', 'Processing...');
       }
     }
 
     function renderThumbnails(thumbnails) {
-      thumbnailsEl.innerHTML = '';
-      Object.entries(thumbnails).forEach(([label, url]) => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.innerHTML = `<h4>${label}</h4><img src="${url}" alt="${label}" />`;
-        thumbnailsEl.appendChild(card);
+      r0TileEl.innerHTML = '';
+      r1GridEl.innerHTML = '';
+
+      const r0Url = thumbnails.R0;
+      if (r0Url) {
+        r0TileEl.innerHTML = `
+          <div class="tile thumb">
+            <h4>R0</h4>
+            <img src="${r0Url}" alt="R0 thumbnail" />
+            <a class="link-btn" href="${r0Url}" target="_blank" rel="noopener">Open full size</a>
+          </div>
+        `;
+      }
+
+      ['R1', 'R2', 'R3'].forEach((label) => {
+        const url = thumbnails[label];
+        const tile = document.createElement('div');
+        tile.className = 'tile thumb';
+        tile.innerHTML = `
+          <h4>${label}</h4>
+          ${url ? `<img src="${url}" alt="${label} thumbnail" />` : '<div class="muted">Not generated yet.</div>'}
+          ${url ? `<a class="link-btn" href="${url}" target="_blank" rel="noopener">Open full size</a>` : ''}
+        `;
+        r1GridEl.appendChild(tile);
       });
     }
 
     function renderCandidates(data) {
       candidatesEl.innerHTML = '';
       const stepCandidates = data.candidates?.[data.step] || [];
-      stepCandidates.forEach((candidate) => {
+      candidateStatusEl.textContent = stepCandidates.length ? 'Choose your favorite candidate.' : 'Awaiting candidates...';
+      stepCandidates.slice(0, 2).forEach((candidate, index) => {
         const card = document.createElement('div');
-        card.className = 'card';
+        card.className = 'tile';
         card.innerHTML = `
-          <img src="${candidate.image_url}" alt="Candidate" />
-          <p>Score: ${candidate.score}</p>
-          <pre>${JSON.stringify(candidate.description, null, 2)}</pre>
-          <button data-choice="${candidate.id}">Choose</button>
+          <h4>Candidate ${index + 1}</h4>
+          <img src="${candidate.image_url}" alt="Candidate ${index + 1}" />
+          <div><strong>Score:</strong> ${candidate.score}</div>
+          <details>
+            <summary>View description</summary>
+            <pre>${JSON.stringify(candidate.description, null, 2)}</pre>
+          </details>
+          <div class="row">
+            <button data-choice="${candidate.id}" class="choose-btn">Choose</button>
+            <a class="link-btn" href="${candidate.image_url}" target="_blank" rel="noopener">Open full size</a>
+          </div>
         `;
-        card.querySelector('button').addEventListener('click', () => chooseCandidate(candidate.id));
+        const chooseBtn = card.querySelector('.choose-btn');
+        chooseBtn.disabled = data.status !== 'awaiting_choice';
+        chooseBtn.addEventListener('click', () => chooseCandidate(candidate.id));
         candidatesEl.appendChild(card);
       });
     }
@@ -147,13 +448,23 @@
 
     nextStepBtn.addEventListener('click', async () => {
       if (!currentJobId) return;
+      nextStepBtn.disabled = true;
       await fetch(`/api/iterate/${currentJobId}/next`, { method: 'POST' });
       fetchStatus();
     });
 
     function renderFinal(finalUrl) {
-      if (!finalUrl) return;
-      finalImageEl.innerHTML = `<img src="${finalUrl}" alt="Final" />`;
+      if (!finalUrl) {
+        finalImageEl.innerHTML = '<div class="tile"><h4>Final Image</h4><div class="muted">Not ready yet.</div></div>';
+        return;
+      }
+      finalImageEl.innerHTML = `
+        <div class="tile thumb">
+          <h4>Final (R3)</h4>
+          <img src="${finalUrl}" alt="Final R3" />
+          <a class="link-btn" href="${finalUrl}" target="_blank" rel="noopener">Open full size</a>
+        </div>
+      `;
       document.getElementById('video-image-url').value = `${window.location.origin}${finalUrl}`;
     }
 
@@ -177,12 +488,20 @@
 
     async function pollVideo(jobId) {
       videoStatusEl.textContent = 'Video job queued...';
+      copyVideoBtn.hidden = true;
+      videoLinkEl.innerHTML = '';
       const interval = setInterval(async () => {
         const response = await fetch(`/api/video-jobs/${jobId}`);
         const data = await response.json();
         videoStatusEl.textContent = `Video status: ${data.status}`;
         if (data.video_url) {
-          videoStatusEl.innerHTML = `Video ready: <a href="${data.video_url}" target="_blank">${data.video_url}</a>`;
+          videoLinkEl.innerHTML = `<a class="link-btn" href="${data.video_url}" target="_blank" rel="noopener">Open video</a>`;
+          copyVideoBtn.hidden = false;
+          copyVideoBtn.onclick = async () => {
+            await navigator.clipboard.writeText(data.video_url);
+            copyVideoBtn.textContent = 'Copied';
+            setTimeout(() => { copyVideoBtn.textContent = 'Copy Video URL'; }, 1500);
+          };
           clearInterval(interval);
         }
         if (data.status === 'error') {
@@ -191,6 +510,8 @@
         }
       }, 5000);
     }
+
+    resetUI();
   </script>
 </body>
 </html>

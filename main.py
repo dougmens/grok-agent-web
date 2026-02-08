@@ -140,9 +140,43 @@ def _vision_json(data_uri: str, prompt: str) -> Dict[str, Any]:
         json=payload,
         timeout=120,
     )
-    response.raise_for_status()
-    content = response.json()["choices"][0]["message"]["content"]
-    return json.loads(content)
+    status_code = response.status_code
+    raw_text = response.text
+    if status_code != 200:
+        raise Exception(f"HTTP {status_code}: {raw_text[:500]}")
+    try:
+        response_data = response.json()
+    except json.JSONDecodeError as exc:
+        raise Exception(f"Invalid JSON response from xAI: {raw_text[:500]}") from exc
+    choices = response_data.get("choices")
+    if not choices or not isinstance(choices, list):
+        raise Exception(f"Missing choices in xAI response: {raw_text[:500]}")
+    message = choices[0].get("message") if isinstance(choices[0], dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if not content or not isinstance(content, str) or not content.strip():
+        raise Exception(f"Missing content in xAI response: {raw_text[:500]}")
+    extracted = _extract_json_content(content)
+    try:
+        return json.loads(extracted)
+    except json.JSONDecodeError as exc:
+        snippet = content[:500]
+        raise Exception(f"Failed to parse model JSON output: {snippet}") from exc
+
+
+def _extract_json_content(content: str) -> str:
+    fence_start = content.find("```")
+    if fence_start != -1:
+        fence_end = content.find("```", fence_start + 3)
+        if fence_end != -1:
+            fenced = content[fence_start + 3:fence_end].strip()
+            if fenced.lower().startswith("json"):
+                fenced = fenced[4:].strip()
+            return fenced
+    start = content.find("{")
+    end = content.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise Exception(f"Unable to locate JSON object in model output: {content[:500]}")
+    return content[start:end + 1]
 
 
 def _score_candidate(desc: Dict[str, Any], step: int) -> int:
