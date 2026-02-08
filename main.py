@@ -215,10 +215,14 @@ def _generate_candidates(job: IterateJob, step: int) -> None:
 def _start_iteration(job_id: str) -> None:
     job = ITERATE_JOBS[job_id]
     try:
+        job.status = "processing"
+        job.step = 0
         job_dir = STORAGE_DIR / job.id
         job_dir.mkdir(parents=True, exist_ok=True)
         r0_path = job_dir / "R0.png"
         job.style_card = _vision_json(_encode_image(r0_path), STYLE_PROMPT)
+        job.step = 1
+        job.status = "waiting_choice"
         _generate_candidates(job, 1)
     except Exception as exc:  # noqa: BLE001
         job.status = "error"
