@@ -203,7 +203,20 @@ def _generate_candidates(job: IterateJob, step: int) -> None:
         candidate_id = f"s{step}c{idx + 1}"
         image_path = job_dir / f"{candidate_id}.png"
         image_path.write_bytes(image_bytes)
-        desc = _vision_json(_encode_image(image_path), CANDIDATE_PROMPT)
+        try:
+            desc = _vision_json(_encode_image(image_path), CANDIDATE_PROMPT)
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 403:
+                desc = {
+                    "description": "",
+                    "framing": "",
+                    "lighting": "",
+                    "privacy": "",
+                    "consistency": "",
+                    "artifacts": "",
+                }
+            else:
+                raise
         score = _score_candidate(desc, step)
         candidates.append(
             Candidate(id=candidate_id, image_path=str(image_path), description=desc, score=score)
@@ -220,9 +233,25 @@ def _start_iteration(job_id: str) -> None:
         job_dir = STORAGE_DIR / job.id
         job_dir.mkdir(parents=True, exist_ok=True)
         r0_path = job_dir / "R0.png"
-        job.style_card = _vision_json(_encode_image(r0_path), STYLE_PROMPT)
-        job.step = 1
-        job.status = "waiting_choice"
+        try:
+            job.style_card = _vision_json(_encode_image(r0_path), STYLE_PROMPT)
+            job.step = 1
+            job.status = "waiting_choice"
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 403:
+                job.style_card = {
+                    "people_count": None,
+                    "clothing_style": "",
+                    "setting": "",
+                    "lighting": "",
+                    "camera_framing": "",
+                    "mood_keywords": [],
+                }
+                job.error = "Vision unavailable (403), proceeding with defaults"
+                job.status = "waiting_choice"
+                job.step = 1
+            else:
+                raise
         _generate_candidates(job, 1)
     except Exception as exc:  # noqa: BLE001
         job.status = "error"
