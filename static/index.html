@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Grok Image-to-Video Iteration Studio</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; background: #0f1115; color: #f4f4f6; }
+    h1, h2, h3 { margin: 0 0 12px; }
+    .card { background: #1a1d24; padding: 16px; border-radius: 12px; margin-bottom: 16px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    img { width: 100%; border-radius: 8px; }
+    button { background: #4d7dff; border: none; color: white; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    pre { background: #11141a; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    .muted { color: #a2a4ab; }
+  </style>
+</head>
+<body>
+  <h1>Grok Image-to-Video Iteration Studio</h1>
+  <p class="muted">Upload a reference image (R0), iterate with micro-adjustments, and generate an image-to-video output.</p>
+
+  <div class="card">
+    <h2>Start Iteration</h2>
+    <form id="upload-form">
+      <input type="file" id="file-input" accept="image/*" required />
+      <input type="text" id="prompt-input" placeholder="Optional prompt" style="width: 60%;" />
+      <button type="submit">Start</button>
+    </form>
+    <div id="job-info" class="muted"></div>
+  </div>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div id="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Style Card</h2>
+    <pre id="style-card">Awaiting analysis...</pre>
+  </div>
+
+  <div class="card">
+    <h2>R0–R3 Thumbnails</h2>
+    <div id="thumbnails" class="grid"></div>
+  </div>
+
+  <div class="card">
+    <h2>Candidates</h2>
+    <div id="candidates" class="grid"></div>
+    <button id="next-step" disabled>Generate Next Step</button>
+  </div>
+
+  <div class="card">
+    <h2>Final Image & Video</h2>
+    <div id="final-image"></div>
+    <div id="video-status"></div>
+    <form id="video-form">
+      <input type="text" id="video-image-url" placeholder="Image URL" style="width: 55%;" />
+      <input type="text" id="video-prompt" placeholder="Optional prompt" style="width: 35%;" />
+      <button type="submit">Generate Video</button>
+    </form>
+  </div>
+
+  <script>
+    let currentJobId = null;
+    let pollInterval = null;
+
+    const jobInfo = document.getElementById('job-info');
+    const statusEl = document.getElementById('status');
+    const styleCardEl = document.getElementById('style-card');
+    const candidatesEl = document.getElementById('candidates');
+    const thumbnailsEl = document.getElementById('thumbnails');
+    const nextStepBtn = document.getElementById('next-step');
+    const finalImageEl = document.getElementById('final-image');
+    const videoStatusEl = document.getElementById('video-status');
+
+    document.getElementById('upload-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const fileInput = document.getElementById('file-input');
+      if (!fileInput.files.length) return;
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      formData.append('prompt', document.getElementById('prompt-input').value);
+
+      const response = await fetch('/api/iterate', { method: 'POST', body: formData });
+      const data = await response.json();
+      currentJobId = data.job_id;
+      jobInfo.textContent = `Job: ${currentJobId}`;
+      if (pollInterval) clearInterval(pollInterval);
+      pollInterval = setInterval(fetchStatus, 3000);
+      fetchStatus();
+    });
+
+    async function fetchStatus() {
+      if (!currentJobId) return;
+      const response = await fetch(`/api/iterate/${currentJobId}`);
+      const data = await response.json();
+      statusEl.textContent = `Status: ${data.status} | Step: ${data.step}`;
+      styleCardEl.textContent = data.style_card ? JSON.stringify(data.style_card, null, 2) : 'Awaiting analysis...';
+      renderThumbnails(data.thumbnails || {});
+      renderCandidates(data);
+      renderFinal(data.final_image_url);
+      nextStepBtn.disabled = data.status !== 'ready_for_next';
+      if (data.status === 'completed') {
+        clearInterval(pollInterval);
+      }
+    }
+
+    function renderThumbnails(thumbnails) {
+      thumbnailsEl.innerHTML = '';
+      Object.entries(thumbnails).forEach(([label, url]) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `<h4>${label}</h4><img src="${url}" alt="${label}" />`;
+        thumbnailsEl.appendChild(card);
+      });
+    }
+
+    function renderCandidates(data) {
+      candidatesEl.innerHTML = '';
+      const stepCandidates = data.candidates?.[data.step] || [];
+      stepCandidates.forEach((candidate) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <img src="${candidate.image_url}" alt="Candidate" />
+          <p>Score: ${candidate.score}</p>
+          <pre>${JSON.stringify(candidate.description, null, 2)}</pre>
+          <button data-choice="${candidate.id}">Choose</button>
+        `;
+        card.querySelector('button').addEventListener('click', () => chooseCandidate(candidate.id));
+        candidatesEl.appendChild(card);
+      });
+    }
+
+    async function chooseCandidate(choiceId) {
+      if (!currentJobId) return;
+      await fetch(`/api/iterate/${currentJobId}/choose`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ choice_id: choiceId }),
+      });
+      fetchStatus();
+    }
+
+    nextStepBtn.addEventListener('click', async () => {
+      if (!currentJobId) return;
+      await fetch(`/api/iterate/${currentJobId}/next`, { method: 'POST' });
+      fetchStatus();
+    });
+
+    function renderFinal(finalUrl) {
+      if (!finalUrl) return;
+      finalImageEl.innerHTML = `<img src="${finalUrl}" alt="Final" />`;
+      document.getElementById('video-image-url').value = `${window.location.origin}${finalUrl}`;
+    }
+
+    document.getElementById('video-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const payload = {
+        image_url: document.getElementById('video-image-url').value,
+        prompt: document.getElementById('video-prompt').value,
+        duration: 6,
+        aspect_ratio: '16:9',
+        resolution: '720p',
+      };
+      const response = await fetch('/api/video-jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      pollVideo(data.job_id);
+    });
+
+    async function pollVideo(jobId) {
+      videoStatusEl.textContent = 'Video job queued...';
+      const interval = setInterval(async () => {
+        const response = await fetch(`/api/video-jobs/${jobId}`);
+        const data = await response.json();
+        videoStatusEl.textContent = `Video status: ${data.status}`;
+        if (data.video_url) {
+          videoStatusEl.innerHTML = `Video ready: <a href="${data.video_url}" target="_blank">${data.video_url}</a>`;
+          clearInterval(interval);
+        }
+        if (data.status === 'error') {
+          videoStatusEl.textContent = `Video error: ${data.error}`;
+          clearInterval(interval);
+        }
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
